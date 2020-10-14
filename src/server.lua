@@ -1,7 +1,26 @@
 
-local server = require("http.server").new(nil, 80) 
-local router = require("http.router").new({charset = "application/json"})
+print("Aaaaaaaaaaaaaaaa")
+
+local server = require("http.server").new(nil, 8080) 
+--local router = require("http.router").new({charset = "application/json"})
 local json = require("json")
+
+box.cfg({listen = 3301})
+box.once("setup", function() 
+    s = box.schema.space.create("storage")
+    box.schema.sequence.create("AutoIncr")
+    s:format({{name = "id", type = "unsigned"}, {name = "key", type = "string"}, {name = "value", type = "string"}})
+    s:create_index("primary", {
+        sequence = "AutoIncr",
+        type = "hash",
+        parts = {"id"}
+    })
+    s:create_index("kv_index", {
+        type = "hash",
+        parts = {"key"}
+    })
+    end
+)
 
 local kv_storage = {
 
@@ -44,31 +63,11 @@ local kv_storage = {
 }
 
 
-box.cfg()
-box.once("setup", function() 
-    s = box.schema.space.create("storage")
-    box.schema.sequence.create("AutoIncr")
-    s:format({{name = "id", type = "unsigned"}, {name = "key", type = "string"}, {name = "value", type = "string"}})
-    s:create_index("primary", {
-        sequence = "AutoIncr",
-        type = "hash",
-        parts = {"id"}
-    })
-    s:create_index("kv_index", {
-        type = "hash",
-        parts = {"key"}
-    })
-    end
-)
+
 
 
 kv_storage.__index = kv_storage
 kv_storage:set_storage(box.space.storage)
-
-
-
-
-
 
 
 local function get_suff(str) 
@@ -94,7 +93,7 @@ local handler_collection = {
     end,
     
     put = function(req)
-        local key = get_suff(req:path())
+        local key = get_suff(req.path)
         local body = req:json()
         if (body.value == nil or #key == 0) then
             return {status = 400}
@@ -108,7 +107,7 @@ local handler_collection = {
     end,
    
     delete = function(req)
-        key = get_suff(req:path())
+        key = get_suff(req.path)
         if (#key == 0) then
             return {status = 400}
         end
@@ -120,7 +119,7 @@ local handler_collection = {
     end,
 
     get = function(req)
-        key = get_suff(req:path())
+        key = get_suff(req.path)
         if (#key == 0) then
             return {status = 400}
         end
@@ -132,10 +131,8 @@ local handler_collection = {
     end
 }
 
-
-server:set_router(router)
-router:route({path = "/kv", method = "POST"}, handler_collection.post)
-router:route({path = "/kv/.*", method = "PUT"}, handler_collection.put)
-router:route({path = "/kv/.*", method = "DELETE"}, handler_collection.delete)
-router:route({path = "/kv/.*", method = "GET"}, handler_collection.get)
+server:route({path = "/kv", method = "POST"}, handler_collection.post)
+server:route({path = "/kv/.*", method = "PUT"}, handler_collection.put)
+server:route({path = "/kv/.*", method = "DELETE"}, handler_collection.delete)
+server:route({path = "/kv/.*", method = "GET"}, handler_collection.get)
 server:start()
